@@ -1,0 +1,1339 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>OFFICE CHAOS — 赛博办公室暴击指南</title>
+<style>
+  :root{
+    --neon-pink:#ff2bd6;
+    --neon-cyan:#00f0ff;
+    --neon-yellow:#ffe600;
+    --neon-purple:#9b3cff;
+    --bg:#0a0418;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;user-select:none;}
+  html,body{width:100%;height:100%;overflow:hidden;background:#000;color:#fff;font-family:'Courier New',monospace;cursor:crosshair;}
+  #app{position:relative;width:100vw;height:100vh;}
+  canvas{display:block;}
+
+  /* ============== HUD 通用 ============== */
+  .hud{position:absolute;pointer-events:none;z-index:10;text-shadow:0 0 8px currentColor;}
+
+  /* 左上 血条 + 通缉度 */
+  #topleft{top:18px;left:18px;width:280px;z-index:11;}
+  .bar-row{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
+  .bar-label{font-size:11px;letter-spacing:2px;color:var(--neon-cyan);min-width:50px;}
+  .bar-bg{flex:1;height:14px;background:rgba(255,255,255,0.08);border:1px solid rgba(0,240,255,0.4);position:relative;overflow:hidden;}
+  .bar-fill{height:100%;width:100%;background:linear-gradient(90deg,var(--neon-pink),var(--neon-yellow));transition:width .2s;box-shadow:0 0 12px var(--neon-pink);}
+  .hp-fill{background:linear-gradient(90deg,#00ff88,var(--neon-cyan));box-shadow:0 0 12px var(--neon-cyan);}
+  .stars{font-size:22px;letter-spacing:4px;color:#333;}
+  .stars .on{color:var(--neon-yellow);text-shadow:0 0 12px var(--neon-yellow),0 0 24px var(--neon-yellow);}
+  .stars .pulse{animation:starpulse .8s ease-in-out infinite alternate;}
+  @keyframes starpulse{from{transform:scale(1);}to{transform:scale(1.25);}}
+
+  /* 右上 手机/任务提示 */
+  #topright{top:18px;right:18px;width:340px;display:flex;flex-direction:column;gap:10px;align-items:flex-end;}
+  .phone{background:linear-gradient(145deg,rgba(20,8,40,0.92),rgba(60,20,80,0.92));border:2px solid var(--neon-pink);border-radius:14px;padding:12px 16px;box-shadow:0 0 18px rgba(255,43,214,0.4);max-width:340px;font-size:12px;line-height:1.6;}
+  .phone .title{color:var(--neon-yellow);font-size:10px;letter-spacing:3px;margin-bottom:4px;}
+  .phone .title::before{content:"📱 ";}
+  .phone .body{color:#fff;}
+  .phone .sub{color:var(--neon-cyan);font-size:10px;margin-top:6px;letter-spacing:1px;}
+
+  /* 底部 武器栏 */
+  #bottom{bottom:24px;left:50%;transform:translateX(-50%);display:flex;gap:6px;background:rgba(10,4,24,0.85);border:1px solid rgba(255,43,214,0.4);padding:8px 12px;border-radius:10px;backdrop-filter:blur(6px);}
+  .weapon{width:64px;height:64px;border:1px solid rgba(255,255,255,0.15);display:flex;align-items:center;justify-content:center;flex-direction:column;position:relative;transition:all .15s;background:rgba(0,0,0,0.4);}
+  .weapon .key{position:absolute;top:2px;left:4px;font-size:9px;color:var(--neon-cyan);font-weight:bold;}
+  .weapon .ico{font-size:26px;line-height:1;}
+  .weapon .name{font-size:8px;letter-spacing:1px;color:#aaa;margin-top:2px;}
+  .weapon.active{background:linear-gradient(180deg,rgba(255,43,214,0.4),rgba(155,60,255,0.2));border-color:var(--neon-pink);box-shadow:0 0 14px var(--neon-pink);transform:scale(1.08);}
+  .weapon.active .name{color:#fff;}
+
+  /* 左下 迷你地图 */
+  #minimap{bottom:24px;left:18px;width:200px;height:200px;border:2px solid var(--neon-cyan);background:rgba(0,0,0,0.75);box-shadow:0 0 18px rgba(0,240,255,0.4);position:relative;overflow:hidden;border-radius:4px;}
+  #minimapCanvas{width:100%;height:100%;display:block;}
+
+  /* 任务列表(右上 phone 下方) */
+  #missionList{position:absolute;top:18px;right:18px;margin-top:0;display:flex;flex-direction:column;gap:6px;z-index:10;}
+  .mission{background:rgba(10,4,24,0.85);border:1px solid rgba(0,240,255,0.4);padding:8px 12px;font-size:11px;line-height:1.5;color:#fff;min-width:260px;backdrop-filter:blur(4px);}
+  .mission .m-title{color:var(--neon-cyan);letter-spacing:2px;font-size:10px;margin-bottom:3px;}
+  .mission .m-desc{color:#ddd;}
+  .mission .m-progress{color:var(--neon-yellow);font-size:10px;margin-top:3px;}
+  .mission.active{border-color:var(--neon-pink);box-shadow:0 0 10px rgba(255,43,214,0.4);}
+  .mission.done{opacity:0.5;border-color:#333;}
+  .mission.done .m-title::after{content:" ✓";color:#00ff88;}
+
+  /* 准星 */
+  #crosshair{position:absolute;top:50%;left:50%;width:20px;height:20px;transform:translate(-50%,-50%);pointer-events:none;z-index:5;}
+  #crosshair::before,#crosshair::after{content:"";position:absolute;background:var(--neon-pink);box-shadow:0 0 4px var(--neon-pink);}
+  #crosshair::before{width:2px;height:100%;left:50%;transform:translateX(-50%);}
+  #crosshair::after{height:2px;width:100%;top:50%;transform:translateY(-50%);}
+
+  /* 互动提示(走近物体时) */
+  #interact{position:absolute;top:60%;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.7);border:1px solid var(--neon-yellow);padding:6px 14px;font-size:12px;color:var(--neon-yellow);letter-spacing:2px;display:none;z-index:8;text-shadow:0 0 6px var(--neon-yellow);}
+
+  /* 开场/结束 */
+  #splash{position:absolute;inset:0;background:radial-gradient(ellipse at center,#1a0830 0%,#000 70%);z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;transition:opacity .8s;}
+  #splash.hide{opacity:0;pointer-events:none;}
+  #splash h1{font-size:48px;letter-spacing:8px;color:var(--neon-pink);text-shadow:0 0 20px var(--neon-pink),0 0 40px var(--neon-pink);margin-bottom:8px;}
+  #splash h2{font-size:14px;letter-spacing:6px;color:var(--neon-cyan);margin-bottom:30px;}
+  #splash .start{font-size:13px;color:#fff;letter-spacing:3px;border:1px solid var(--neon-pink);padding:12px 30px;background:rgba(255,43,214,0.1);animation:breath 1.6s ease-in-out infinite;cursor:pointer;pointer-events:auto;}
+  @keyframes breath{0%,100%{box-shadow:0 0 10px var(--neon-pink);}50%{box-shadow:0 0 30px var(--neon-pink);}}
+  #splash .ctrl{font-size:11px;color:#888;margin-top:20px;letter-spacing:2px;line-height:1.8;}
+
+  /* 死亡/任务失败 */
+  #fail{position:absolute;inset:0;background:rgba(80,0,20,0.92);z-index:90;display:none;flex-direction:column;align-items:center;justify-content:center;text-align:center;}
+  #fail h1{font-size:42px;color:#ff4466;text-shadow:0 0 20px #ff0044;letter-spacing:6px;margin-bottom:10px;}
+  #fail p{color:#fff;font-size:13px;letter-spacing:3px;margin-bottom:20px;}
+  #fail .btn{font-size:12px;color:#fff;border:1px solid #ff4466;padding:10px 24px;cursor:pointer;letter-spacing:3px;pointer-events:auto;}
+
+  /* 字幕 (任务开始/完成) */
+  #banner{position:absolute;top:30%;left:50%;transform:translate(-50%,-50%);font-size:32px;letter-spacing:6px;color:var(--neon-yellow);text-shadow:0 0 20px var(--neon-yellow),0 0 40px var(--neon-yellow);opacity:0;transition:opacity .5s;z-index:50;pointer-events:none;}
+  #banner.show{opacity:1;}
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- 开场 -->
+  <div id="splash">
+    <h1>OFFICE CHAOS</h1>
+    <h2>赛博办公室 · 暴击指南</h2>
+    <div class="start" id="startBtn">PRESS [ ENTER ] TO START</div>
+    <div class="ctrl">
+      WASD 移动 &nbsp;|&nbsp; 鼠标 视角 &nbsp;|&nbsp; 滚轮 加速<br>
+      1-5 切换武器 &nbsp;|&nbsp; 左键 扔 &nbsp;|&nbsp; E 互动 &nbsp;|&nbsp; Shift 冲刺
+    </div>
+  </div>
+
+  <!-- HUD -->
+  <div id="topleft" class="hud">
+    <div class="bar-row"><div class="bar-label">HP</div><div class="bar-bg"><div class="bar-fill hp-fill" id="hpBar"></div></div></div>
+    <div class="bar-row"><div class="bar-label">WANTED</div><div class="stars" id="stars">★★★★★</div></div>
+  </div>
+
+  <div id="topright">
+    <div class="phone hud">
+      <div class="title">PHONE · MSG</div>
+      <div class="body" id="phoneMsg">欢迎入职赛博科技！<br>请完成 3 个"小目标"。</div>
+      <div class="sub" id="phoneSub">— HR</div>
+    </div>
+    <div id="missionList"></div>
+  </div>
+
+  <div id="bottom" class="hud">
+    <div class="weapon" data-w="0"><div class="key">1</div><div class="ico">⌨️</div><div class="name">键盘</div></div>
+    <div class="weapon" data-w="1"><div class="key">2</div><div class="ico">📎</div><div class="name">订书机</div></div>
+    <div class="weapon" data-w="2"><div class="key">3</div><div class="ico">☕</div><div class="name">咖啡</div></div>
+    <div class="weapon" data-w="3"><div class="key">4</div><div class="ico">📁</div><div class="name">文件夹</div></div>
+    <div class="weapon" data-w="4"><div class="key">5</div><div class="ico">🧯</div><div class="name">灭火器</div></div>
+  </div>
+
+  <div id="minimap" class="hud"><canvas id="minimapCanvas" width="200" height="200"></canvas></div>
+  <div id="crosshair"></div>
+  <div id="interact">[ E ] 互动</div>
+  <div id="banner"></div>
+  <div id="fail">
+    <h1>WASTED</h1>
+    <p id="failReason">通缉度 5 星被抓了</p>
+    <div class="btn" id="respawnBtn">[ R ] 重开</div>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+
+/* ===========================================================
+   OFFICE CHAOS  —  赛博办公室暴击指南
+   单文件 Three.js,程序化几何体 + CanvasTexture
+   =========================================================== */
+
+// ---------- 配置 ----------
+const WORLD = { W: 36, D: 24, H: 5 };
+const COLORS = {
+  floor: 0x14082a,
+  wall: 0x1a0a35,
+  glass: 0x00f0ff,
+  pink: 0xff2bd6,
+  yellow: 0xffe600,
+  purple: 0x9b3cff,
+  cyan: 0x00f0ff,
+  boss: 0x1a1a1a,
+  hr: 0x202040,
+};
+
+// ---------- 基础场景 ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x05010f);
+scene.fog = new THREE.Fog(0x05010f, 25, 55);
+
+const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.1, 200);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.getElementById('app').appendChild(renderer.domElement);
+
+// ---------- 灯光 ----------
+scene.add(new THREE.AmbientLight(0x6633aa, 0.45));
+const moon = new THREE.DirectionalLight(0x9966ff, 0.7);
+moon.position.set(15, 25, 10);
+moon.castShadow = true;
+moon.shadow.mapSize.set(1024, 1024);
+moon.shadow.camera.left = -25; moon.shadow.camera.right = 25;
+moon.shadow.camera.top = 25; moon.shadow.camera.bottom = -25;
+scene.add(moon);
+
+// 顶部霓虹灯带(粉/青/紫 三色)
+const neonColors = [COLORS.pink, COLORS.cyan, COLORS.purple];
+for (let i = 0; i < 6; i++) {
+  const c = neonColors[i % 3];
+  const strip = new THREE.PointLight(c, 1.5, 18, 2);
+  strip.position.set(-15 + i * 6, 4.6, -10);
+  scene.add(strip);
+  // 灯条本体
+  const bar = new THREE.Mesh(
+    new THREE.BoxGeometry(4, 0.05, 0.1),
+    new THREE.MeshBasicMaterial({ color: c })
+  );
+  bar.position.copy(strip.position);
+  bar.position.y = 4.85;
+  scene.add(bar);
+}
+
+// ---------- 程序化贴图 ----------
+function makeNeonText(text, color = '#ff2bd6', bg = 'transparent') {
+  const c = document.createElement('canvas');
+  c.width = 512; c.height = 128;
+  const g = c.getContext('2d');
+  if (bg !== 'transparent') { g.fillStyle = bg; g.fillRect(0, 0, 512, 128); }
+  g.font = 'bold 70px "Courier New", monospace';
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.shadowColor = color; g.shadowBlur = 24;
+  g.fillStyle = color;
+  g.fillText(text, 256, 64);
+  g.shadowBlur = 0;
+  g.fillText(text, 256, 64);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+function makeLogoTexture() {
+  const c = document.createElement('canvas');
+  c.width = 512; c.height = 256;
+  const g = c.getContext('2d');
+  // 背景
+  g.fillStyle = '#0a0418'; g.fillRect(0, 0, 512, 256);
+  // 网格
+  g.strokeStyle = 'rgba(155,60,255,0.3)'; g.lineWidth = 1;
+  for (let i = 0; i < 512; i += 32) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i, 256); g.stroke(); }
+  for (let i = 0; i < 256; i += 32) { g.beginPath(); g.moveTo(0, i); g.lineTo(512, i); g.stroke(); }
+  // Logo
+  g.font = 'bold 90px "Courier New"'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.shadowColor = '#ff2bd6'; g.shadowBlur = 30; g.fillStyle = '#ff2bd6';
+  g.fillText('CYBER', 256, 80);
+  g.shadowColor = '#00f0ff'; g.shadowBlur = 30; g.fillStyle = '#00f0ff';
+  g.fillText('CORP', 256, 170);
+  g.shadowBlur = 0;
+  g.strokeStyle = '#ffe600'; g.lineWidth = 3;
+  g.strokeRect(8, 8, 496, 240);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+function makeScreenTexture() {
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 144;
+  const g = c.getContext('2d');
+  g.fillStyle = '#001a33'; g.fillRect(0, 0, 256, 144);
+  g.strokeStyle = 'rgba(0,240,255,0.4)'; g.lineWidth = 1;
+  for (let i = 0; i < 256; i += 16) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i, 144); g.stroke(); }
+  for (let i = 0; i < 144; i += 16) { g.beginPath(); g.moveTo(0, i); g.lineTo(256, i); g.stroke(); }
+  // 代码
+  g.font = '11px monospace'; g.fillStyle = '#00f0ff';
+  const code = ['> ls -la', 'drwxr-xr-x  2 root', 'drwxr-xr-x  4 user', '-rw-r--r--  1 boss', '> rm -rf /meeting', '> chmod 777 dreams', '> sudo nap', '> exit', '> _'];
+  code.forEach((l, i) => g.fillText(l, 8, 16 + i * 14));
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+// ---------- 地面 ----------
+const floorMat = new THREE.MeshStandardMaterial({
+  color: COLORS.floor, roughness: 0.4, metalness: 0.6,
+  emissive: 0x220044, emissiveIntensity: 0.2,
+});
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(WORLD.W, WORLD.D), floorMat);
+floor.rotation.x = -Math.PI / 2;
+floor.receiveShadow = true;
+scene.add(floor);
+
+// 地面网格
+const gridHelper = new THREE.GridHelper(WORLD.W, 36, 0x9b3cff, 0x3a1066);
+gridHelper.position.y = 0.01;
+gridHelper.material.transparent = true;
+gridHelper.material.opacity = 0.35;
+scene.add(gridHelper);
+
+// ---------- 通用材质 ----------
+const neonMat = (color, emI = 1.5) => new THREE.MeshStandardMaterial({
+  color, emissive: color, emissiveIntensity: emI,
+  metalness: 0.4, roughness: 0.3,
+});
+const wallMat = new THREE.MeshStandardMaterial({
+  color: COLORS.wall, roughness: 0.5, metalness: 0.3,
+  emissive: 0x2a0a55, emissiveIntensity: 0.1,
+});
+const glassMat = new THREE.MeshPhysicalMaterial({
+  color: 0x88ddff, transparent: true, opacity: 0.18,
+  metalness: 0.9, roughness: 0.05, transmission: 0.6,
+  emissive: 0x00aaff, emissiveIntensity: 0.2,
+});
+
+// ---------- 墙体(四周) ----------
+function buildWall(x, z, w, h, rotY = 0, mat = wallMat) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.2), mat);
+  m.position.set(x, h / 2, z);
+  m.rotation.y = rotY;
+  m.castShadow = m.receiveShadow = true;
+  scene.add(m);
+  return m;
+}
+buildWall(0, -WORLD.D/2, WORLD.W, WORLD.H);
+buildWall(0,  WORLD.D/2, WORLD.W, WORLD.H);
+buildWall(-WORLD.W/2, 0, WORLD.D, WORLD.H, Math.PI/2);
+buildWall( WORLD.W/2, 0, WORLD.D, WORLD.H, Math.PI/2);
+
+// 玻璃幕墙(北墙, 落地窗效果)
+const glassWall = new THREE.Mesh(new THREE.BoxGeometry(WORLD.W, WORLD.H, 0.1), glassMat);
+glassWall.position.set(0, WORLD.H/2, -WORLD.D/2);
+scene.add(glassWall);
+
+// 远景城市轮廓(北墙外)
+const cityGroup = new THREE.Group();
+for (let i = 0; i < 18; i++) {
+  const h = 3 + Math.random() * 8;
+  const w = 1.5 + Math.random() * 1.5;
+  const b = new THREE.Mesh(
+    new THREE.BoxGeometry(w, h, w),
+    new THREE.MeshBasicMaterial({ color: 0x110033, transparent: true, opacity: 0.95 })
+  );
+  b.position.set(-17 + i * 2, h/2, -WORLD.D/2 - 5 - Math.random() * 2);
+  cityGroup.add(b);
+  // 窗户灯光
+  for (let y = 0; y < h - 1; y += 1) {
+    for (let x = -w/2 + 0.3; x < w/2 - 0.3; x += 0.5) {
+      if (Math.random() < 0.4) {
+        const win = new THREE.Mesh(
+          new THREE.BoxGeometry(0.2, 0.3, 0.05),
+          new THREE.MeshBasicMaterial({
+            color: Math.random() < 0.5 ? 0xff2bd6 : 0x00f0ff,
+          })
+        );
+        win.position.set(b.position.x + x, y + 0.5, b.position.z + w/2 + 0.05);
+        cityGroup.add(win);
+      }
+    }
+  }
+}
+scene.add(cityGroup);
+
+// 天花板霓虹招牌 "996 is LIFE"
+const sign = new THREE.Mesh(
+  new THREE.PlaneGeometry(8, 1.5),
+  new THREE.MeshBasicMaterial({ map: makeNeonText('996 is LIFE', '#ff2bd6', 'transparent'), transparent: true })
+);
+sign.position.set(-8, WORLD.H - 0.4, -WORLD.D/2 + 0.2);
+scene.add(sign);
+
+const sign2 = new THREE.Mesh(
+  new THREE.PlaneGeometry(6, 1.2),
+  new THREE.MeshBasicMaterial({ map: makeNeonText('Just Do It™', '#00f0ff', 'transparent'), transparent: true })
+);
+sign2.position.set(8, WORLD.H - 0.4, -WORLD.D/2 + 0.2);
+scene.add(sign2);
+
+// ---------- 工位区(西半) ----------
+function buildWorkstation(x, z, idx) {
+  const g = new THREE.Group();
+  // 桌子
+  const desk = new THREE.Mesh(
+    new THREE.BoxGeometry(2, 0.05, 1),
+    new THREE.MeshStandardMaterial({ color: 0x2a1a55, metalness: 0.6, roughness: 0.4 })
+  );
+  desk.position.y = 0.75; desk.castShadow = desk.receiveShadow = true;
+  g.add(desk);
+  // 桌腿
+  for (let dx of [-0.9, 0.9]) for (let dz of [-0.4, 0.4]) {
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.75), new THREE.MeshStandardMaterial({ color: 0x444444, metalness: 0.8 }));
+    leg.position.set(dx, 0.375, dz);
+    g.add(leg);
+  }
+  // 显示器
+  const screen = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.7, 0.45),
+    new THREE.MeshBasicMaterial({ map: makeScreenTexture() })
+  );
+  screen.position.set(0, 1.15, -0.35);
+  screen.rotation.x = -0.1;
+  g.add(screen);
+  // 显示器外壳
+  const bezel = new THREE.Mesh(
+    new THREE.BoxGeometry(0.75, 0.5, 0.04),
+    new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.7 })
+  );
+  bezel.position.set(0, 1.15, -0.36);
+  g.add(bezel);
+  // 键盘
+  const kb = new THREE.Mesh(
+    new THREE.BoxGeometry(0.4, 0.02, 0.15),
+    new THREE.MeshStandardMaterial({ color: 0x222222, emissive: 0xff2bd6, emissiveIntensity: 0.3 })
+  );
+  kb.position.set(0, 0.79, 0.15);
+  g.add(kb);
+  // 椅子
+  const chair = new THREE.Group();
+  const seat = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.05, 0.45), new THREE.MeshStandardMaterial({ color: 0x000000 }));
+  seat.position.y = 0.5; chair.add(seat);
+  const back = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.6, 0.05), new THREE.MeshStandardMaterial({ color: 0x000000 }));
+  back.position.set(0, 0.8, -0.2); chair.add(back);
+  const chairBase = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.5, 8), new THREE.MeshStandardMaterial({ color: 0x666666 }));
+  chairBase.position.y = 0.25; chair.add(chairBase);
+  chair.position.set(0, 0, 0.65);
+  g.add(chair);
+  // 霓虹底座灯
+  const underGlow = new THREE.Mesh(
+    new THREE.BoxGeometry(2, 0.05, 1),
+    new THREE.MeshBasicMaterial({ color: (idx % 2) ? 0xff2bd6 : 0x00f0ff, transparent: true, opacity: 0.5 })
+  );
+  underGlow.position.set(0, 0.74, 0);
+  g.add(underGlow);
+
+  g.position.set(x, 0, z);
+  g.userData = { idx };
+  scene.add(g);
+  return g;
+}
+// 4 排工位
+for (let i = 0; i < 8; i++) {
+  buildWorkstation(-12 + (i % 4) * 4, -8 + Math.floor(i/4) * 5, i);
+}
+
+// ---------- 老板办公室(东北角) ----------
+const bossRoom = new THREE.Group();
+const bossWall1 = new THREE.Mesh(new THREE.BoxGeometry(0.15, WORLD.H, 8), wallMat);
+bossWall1.position.set(8, WORLD.H/2, 4);
+bossRoom.add(bossWall1);
+const bossWall2 = new THREE.Mesh(new THREE.BoxGeometry(0.15, WORLD.H, 6), wallMat);
+bossWall2.position.set(14, WORLD.H/2, -3);
+bossWall2.rotation.y = Math.PI/2;
+bossRoom.add(bossWall2);
+scene.add(bossRoom);
+
+// 老板桌(巨大的)
+const bossDesk = new THREE.Mesh(
+  new THREE.BoxGeometry(4, 0.1, 1.8),
+  new THREE.MeshStandardMaterial({ color: 0x0a0a0a, metalness: 0.8, roughness: 0.2 })
+);
+bossDesk.position.set(13, 0.75, 6);
+bossDesk.castShadow = true;
+scene.add(bossDesk);
+
+// 老板椅(更大,真皮感)
+const bossChair = new THREE.Mesh(
+  new THREE.BoxGeometry(0.7, 1.2, 0.7),
+  new THREE.MeshStandardMaterial({ color: 0x1a0000, roughness: 0.5, metalness: 0.2 })
+);
+bossChair.position.set(13, 0.6, 7.3);
+scene.add(bossChair);
+
+// 老板桌咖啡杯(任务目标!)
+const bossCoffee = new THREE.Group();
+const cupBody = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.12, 0.1, 0.2, 16),
+  new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xff2bd6, emissiveIntensity: 0.4 })
+);
+cupBody.position.y = 0.85; bossCoffee.add(cupBody);
+const coffeeLid = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.13, 0.13, 0.02, 16),
+  new THREE.MeshStandardMaterial({ color: 0x222222 })
+);
+coffeeLid.position.y = 0.96; bossCoffee.add(coffeeLid);
+bossCoffee.position.set(13, 0, 6);
+scene.add(bossCoffee);
+
+// 老板霓虹名牌
+const bossSign = new THREE.Mesh(
+  new THREE.PlaneGeometry(2, 0.4),
+  new THREE.MeshBasicMaterial({ map: makeNeonText('BOSS', '#ff2bd6', 'transparent'), transparent: true })
+);
+bossSign.position.set(13, 3.2, 4.1);
+scene.add(bossSign);
+
+// ---------- 茶水间(东南角) ----------
+const pantry = new THREE.Group();
+const pantryWall = new THREE.Mesh(new THREE.BoxGeometry(0.15, WORLD.H, 6), wallMat);
+pantryWall.position.set(8, WORLD.H/2, -7);
+pantryWall.rotation.y = Math.PI/2;
+pantry.add(pantryWall);
+scene.add(pantry);
+
+// 茶水台
+const pantryCounter = new THREE.Mesh(
+  new THREE.BoxGeometry(4, 0.9, 0.8),
+  new THREE.MeshStandardMaterial({ color: 0x222244, metalness: 0.5 })
+);
+pantryCounter.position.set(14, 0.45, -9);
+scene.add(pantryCounter);
+
+// 咖啡机
+const coffeeMachine = new THREE.Group();
+const cmBody = new THREE.Mesh(
+  new THREE.BoxGeometry(0.4, 0.6, 0.3),
+  new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.7 })
+);
+cmBody.position.y = 1.2; coffeeMachine.add(cmBody);
+const cmScreen = new THREE.Mesh(
+  new THREE.PlaneGeometry(0.25, 0.15),
+  new THREE.MeshBasicMaterial({ color: 0x00ff88 })
+);
+cmScreen.position.set(0, 1.35, 0.16); coffeeMachine.add(cmScreen);
+coffeeMachine.position.set(13, 0.9, -9);
+scene.add(coffeeMachine);
+
+// 沙发(躲藏点)
+const sofa = new THREE.Mesh(
+  new THREE.BoxGeometry(2.5, 0.5, 0.8),
+  new THREE.MeshStandardMaterial({ color: 0x4a0a4a, roughness: 0.8 })
+);
+sofa.position.set(15, 0.25, -8);
+scene.add(sofa);
+
+// ---------- 会议室(中央) ----------
+const meetingRoom = new THREE.Group();
+const mWall1 = new THREE.Mesh(new THREE.BoxGeometry(6, WORLD.H, 0.15), wallMat);
+mWall1.position.set(0, WORLD.H/2, 4);
+meetingRoom.add(mWall1);
+const mWall2 = new THREE.Mesh(new THREE.BoxGeometry(6, WORLD.H, 0.15), wallMat);
+mWall2.position.set(0, WORLD.H/2, -2);
+meetingRoom.add(mWall2);
+scene.add(meetingRoom);
+
+// 玻璃隔断(会议室两面)
+const mGlass1 = new THREE.Mesh(new THREE.PlaneGeometry(5.8, WORLD.H - 0.5), glassMat);
+mGlass1.position.set(0, WORLD.H/2, 4);
+mGlass1.rotation.y = Math.PI/2;
+scene.add(mGlass1);
+const mGlass2 = new THREE.Mesh(new THREE.PlaneGeometry(5.8, WORLD.H - 0.5), glassMat);
+mGlass2.position.set(0, WORLD.H/2, -2);
+mGlass2.rotation.y = Math.PI/2;
+scene.add(mGlass2);
+
+// 会议室大桌
+const mTable = new THREE.Mesh(
+  new THREE.CylinderGeometry(1.5, 1.5, 0.1, 16),
+  new THREE.MeshStandardMaterial({ color: 0x1a0a2a, metalness: 0.7 })
+);
+mTable.position.set(0, 0.75, 1);
+scene.add(mTable);
+// 会议室椅
+for (let a = 0; a < 6; a++) {
+  const c = new THREE.Mesh(
+    new THREE.BoxGeometry(0.4, 0.4, 0.4),
+    new THREE.MeshStandardMaterial({ color: 0x000000 })
+  );
+  const ang = (a / 6) * Math.PI * 2;
+  c.position.set(Math.cos(ang) * 2.2, 0.2, 1 + Math.sin(ang) * 2.2);
+  scene.add(c);
+}
+
+// 全息投影台
+const holo = new THREE.Group();
+const holoBase = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.3, 0.3, 0.05),
+  new THREE.MeshStandardMaterial({ color: 0x222222, emissive: 0x00f0ff, emissiveIntensity: 0.5 })
+);
+holoBase.position.set(0, 0.78, 1);
+holo.add(holoBase);
+// 全息"公司logo"
+const holoLogo = new THREE.Mesh(
+  new THREE.PlaneGeometry(0.8, 0.4),
+  new THREE.MeshBasicMaterial({ map: makeLogoTexture(), transparent: true, opacity: 0.8 })
+);
+holoLogo.position.set(0, 1.4, 1);
+holo.add(holoLogo);
+scene.add(holo);
+
+// 中央LOGO墙(接待台背景)
+const logoWall = new THREE.Mesh(
+  new THREE.PlaneGeometry(6, 3),
+  new THREE.MeshBasicMaterial({ map: makeLogoTexture() })
+);
+logoWall.position.set(0, 2, -WORLD.D/2 + 0.3);
+scene.add(logoWall);
+
+// 中央大植物
+const plant = new THREE.Group();
+const pot = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.3, 0.25, 0.4, 8),
+  new THREE.MeshStandardMaterial({ color: 0x1a1a1a })
+);
+pot.position.y = 0.2; plant.add(pot);
+for (let i = 0; i < 6; i++) {
+  const leaf = new THREE.Mesh(
+    new THREE.ConeGeometry(0.15, 0.8, 6),
+    new THREE.MeshStandardMaterial({ color: 0x00ff88, emissive: 0x00ff44, emissiveIntensity: 0.2 })
+  );
+  leaf.position.y = 0.6 + i * 0.1;
+  leaf.rotation.z = (i / 6) * Math.PI * 2;
+  leaf.position.x = Math.cos(i) * 0.15;
+  leaf.position.z = Math.sin(i) * 0.15;
+  plant.add(leaf);
+}
+plant.position.set(-2, 0, 0);
+scene.add(plant);
+
+/* ===========================================================
+   玩家
+   =========================================================== */
+const player = {
+  pos: new THREE.Vector3(-8, 0, 0),
+  vel: new THREE.Vector3(),
+  yaw: -1.0, pitch: -0.2, // 一上来朝办公区看 (boss 方向)
+  hp: 150, maxHp: 150,
+  wanted: 0, // 0~5
+  weapon: 0,
+  sprint: false,
+  height: 1.7, radius: 0.35,
+  interactTarget: null,
+  coffee: false, // 是否拿到老板咖啡
+  filesThrown: 0, // 砸主管的文件数
+  pantrying: false, pantryingTimer: 0,
+};
+
+// 玩家视觉(一个发光小人)
+const playerMesh = new THREE.Group();
+const pBody = new THREE.Mesh(
+  new THREE.CapsuleGeometry(0.3, 1, 4, 8),
+  new THREE.MeshStandardMaterial({ color: 0x2a4a8a, emissive: 0x00f0ff, emissiveIntensity: 0.4 })
+);
+pBody.position.y = 0.85; playerMesh.add(pBody);
+const pHead = new THREE.Mesh(
+  new THREE.SphereGeometry(0.25, 16, 12),
+  new THREE.MeshStandardMaterial({ color: 0xffcc99 })
+);
+pHead.position.y = 1.75; playerMesh.add(pHead);
+// 员工牌
+const pBadge = new THREE.Mesh(
+  new THREE.PlaneGeometry(0.2, 0.15),
+  new THREE.MeshBasicMaterial({ color: 0xff2bd6, side: THREE.DoubleSide })
+);
+pBadge.position.set(0, 1.4, 0.31); playerMesh.add(pBadge);
+// 玩家光环
+const pRing = new THREE.Mesh(
+  new THREE.RingGeometry(0.5, 0.55, 32),
+  new THREE.MeshBasicMaterial({ color: 0x00f0ff, transparent: true, opacity: 0.5, side: THREE.DoubleSide })
+);
+pRing.rotation.x = -Math.PI / 2;
+pRing.position.y = 0.02;
+playerMesh.add(pRing);
+scene.add(playerMesh);
+
+// 摄像机跟随(第三人称)
+camera.position.set(-8, 3, 5);
+camera.lookAt(player.pos);
+
+/* ===========================================================
+   NPC  -  老板 / HR 主管
+   =========================================================== */
+function makeNPC({ color, accent, name, x, z, role }) {
+  const g = new THREE.Group();
+  // 身体(西装,大肚)
+  const body = new THREE.Mesh(
+    new THREE.CapsuleGeometry(0.4, 0.7, 4, 8),
+    new THREE.MeshStandardMaterial({ color, emissive: accent, emissiveIntensity: 0.2 })
+  );
+  body.position.y = 0.9; g.add(body);
+  // 头
+  const head = new THREE.Mesh(
+    new THREE.SphereGeometry(0.28, 16, 12),
+    new THREE.MeshStandardMaterial({ color: 0xffcc99 })
+  );
+  head.position.y = 1.7; g.add(head);
+  // 领带
+  const tie = new THREE.Mesh(
+    new THREE.BoxGeometry(0.08, 0.4, 0.02),
+    new THREE.MeshBasicMaterial({ color: accent })
+  );
+  tie.position.set(0, 1.2, 0.4); g.add(tie);
+  // 头顶标签
+  const tag = new THREE.Mesh(
+    new THREE.PlaneGeometry(1.2, 0.3),
+    new THREE.MeshBasicMaterial({ map: makeNeonText(name, '#' + accent.toString(16).padStart(6,'0'), 'rgba(0,0,0,0.6)'), transparent: true })
+  );
+  tag.position.set(0, 2.2, 0);
+  g.add(tag);
+  // 头顶灯(追击时变红)
+  const alertLight = new THREE.PointLight(0x00ff00, 0.5, 4);
+  alertLight.position.y = 2.3;
+  g.add(alertLight);
+  // 阴影
+  g.traverse(c => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
+
+  g.position.set(x, 0, z);
+  scene.add(g);
+
+  return {
+    obj: g,
+    role,
+    state: 'patrol', // patrol / alert / chase / lost
+    stateTimer: 0,
+    patrolPath: [], // [{x,z}, ...]
+    patrolIdx: 0,
+    speed: 3.2,
+    alertLight,
+    lastSeenPlayer: null,
+    stuntime: 0, // 被砸晕
+  };
+}
+
+// 老板
+const boss = makeNPC({
+  color: 0x1a1a1a, accent: 0xff2bd6, name: 'BOSS', x: 13, z: 5, role: 'boss'
+});
+boss.patrolPath = [
+  { x: 13, z: 7 }, { x: 11, z: 7 }, { x: 11, z: 5 }, { x: 15, z: 5 },
+  { x: 15, z: 7 }, { x: 13, z: 7 }
+];
+
+// HR 主管
+const hr = makeNPC({
+  color: 0x202040, accent: 0xffe600, name: 'HR', x: 12, z: -8, role: 'hr'
+});
+hr.patrolPath = [
+  { x: 12, z: -8 }, { x: -8, z: -8 }, { x: -10, z: 5 }, { x: 8, z: 5 },
+  { x: 8, z: -8 }, { x: 12, z: -8 }
+];
+
+const npcs = [boss, hr];
+
+/* ===========================================================
+   任务系统
+   =========================================================== */
+const missions = [
+  {
+    id: 'coffee', title: '偷老板的咖啡', desc: '在老板发现前偷走他桌上的咖啡', active: true, done: false,
+    progress: '0/1', color: '#ff2bd6',
+  },
+  {
+    id: 'files', title: '给主管发问候', desc: '把 5 份文件夹扔到主管桌上 (5/5)', active: false, done: false,
+    progress: '0/5', color: '#ffe600',
+  },
+  {
+    id: 'nap', title: '周五摸鱼', desc: '在茶水间沙发躲 10 秒,被 HR 抓到就寄', active: false, done: false,
+    progress: '0s', color: '#00f0ff',
+  },
+];
+let currentMission = 0;
+let napProgress = 0;
+
+function updateMissionUI() {
+  const list = document.getElementById('missionList');
+  list.innerHTML = '';
+  missions.forEach((m, idx) => {
+    const div = document.createElement('div');
+    div.className = 'mission' + (m.active ? ' active' : '') + (m.done ? ' done' : '');
+    div.innerHTML = `
+      <div class="m-title">[${idx+1}] ${m.title}</div>
+      <div class="m-desc">${m.desc}</div>
+      <div class="m-progress">▸ ${m.progress}</div>
+    `;
+    list.appendChild(div);
+  });
+}
+updateMissionUI();
+
+function setPhoneMsg(msg, sub = '— HR') {
+  document.getElementById('phoneMsg').innerHTML = msg;
+  document.getElementById('phoneSub').textContent = sub;
+}
+
+function showBanner(text, dur = 2000) {
+  const b = document.getElementById('banner');
+  b.textContent = text;
+  b.classList.add('show');
+  setTimeout(() => b.classList.remove('show'), dur);
+}
+
+function nextMission() {
+  missions[currentMission].active = false;
+  missions[currentMission].done = true;
+  currentMission++;
+  if (currentMission >= missions.length) {
+    setPhoneMsg('🎉 全部任务完成!<br>你是赛博科技 MVP。', '— CEO');
+    showBanner('MISSION COMPLETE', 3000);
+    return;
+  }
+  missions[currentMission].active = true;
+  const m = missions[currentMission];
+  setPhoneMsg(`新任务: <b style="color:${m.color}">${m.title}</b><br>${m.desc}`, '— HR');
+  showBanner(m.title.toUpperCase(), 2500);
+  updateMissionUI();
+}
+
+/* ===========================================================
+   武器 / 投射物
+   =========================================================== */
+const weaponDefs = [
+  { name: '键盘', mass: 0.3, damage: 0.5, color: 0x222222, size: [0.4, 0.05, 0.15] },
+  { name: '订书机', mass: 0.2, damage: 0.3, color: 0x4444aa, size: [0.1, 0.1, 0.2] },
+  { name: '咖啡杯', mass: 0.4, damage: 1.0, color: 0xffffff, size: [0.12, 0.22, 0.12] },
+  { name: '文件夹', mass: 0.25, damage: 0.4, color: 0xffe600, size: [0.3, 0.04, 0.22] },
+  { name: '灭火器', mass: 1.0, damage: 2.0, color: 0xff3333, size: [0.18, 0.4, 0.18] },
+];
+
+function throwWeapon() {
+  const w = weaponDefs[player.weapon];
+  // 创建抛射物
+  const mesh = new THREE.Mesh(
+    new THREE.BoxGeometry(...w.size),
+    new THREE.MeshStandardMaterial({ color: w.color, emissive: w.color, emissiveIntensity: 0.3 })
+  );
+  mesh.castShadow = true;
+  mesh.position.copy(player.pos).add(new THREE.Vector3(0, 1.2, 0));
+  scene.add(mesh);
+  // 方向(摄像机前方)
+  const dir = new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(player.pitch, player.yaw, 0, 'YXZ'));
+  const vel = dir.multiplyScalar(20);
+  projectiles.push({ mesh, vel, life: 2, damage: w.damage, mass: w.mass });
+  // 后坐力
+  player.vel.add(new THREE.Vector3(-dir.x, 0, -dir.z).multiplyScalar(2));
+  // 武器切换冷却 0.5s
+  player.throwCooldown = 0.5;
+}
+const projectiles = [];
+
+/* ===========================================================
+   输入
+   =========================================================== */
+const keys = {};
+const mouse = { dx: 0, dy: 0, down: false, locked: false };
+addEventListener('keydown', e => {
+  if (e.code === 'Enter' && !started) startGame();
+  if (e.code === 'KeyR' && gameOver) respawn();
+  if (!started || gameOver) return;
+  keys[e.code] = true;
+  // 武器切换
+  if (e.code.startsWith('Digit')) {
+    const n = parseInt(e.code.slice(5)) - 1;
+    if (n >= 0 && n < 5) selectWeapon(n);
+  }
+  // 互动
+  if (e.code === 'KeyE') tryInteract();
+});
+addEventListener('keyup', e => { keys[e.code] = false; });
+addEventListener('mousemove', e => {
+  if (mouse.locked) {
+    mouse.dx += e.movementX; mouse.dy += e.movementY;
+  }
+});
+addEventListener('mousedown', e => { if (e.button === 0) mouse.down = true; });
+addEventListener('mouseup',   e => { if (e.button === 0) mouse.down = false; });
+addEventListener('wheel', e => {
+  // 滚轮加速/减速
+  player.speedMul = Math.max(0.5, Math.min(2.5, (player.speedMul || 1) + (e.deltaY > 0 ? -0.1 : 0.1)));
+}, { passive: true });
+addEventListener('contextmenu', e => e.preventDefault());
+
+let started = false, gameOver = false;
+function startGame() {
+  started = true;
+  document.getElementById('splash').classList.add('hide');
+  renderer.domElement.requestPointerLock();
+}
+function respawn() {
+  gameOver = false;
+  document.getElementById('fail').style.display = 'none';
+  player.pos.set(-8, 0, 0); player.hp = 150; player.wanted = 0;
+  player.coffee = false; player.filesThrown = 0; napProgress = 0;
+  bossCoffee.visible = true;
+  missions.forEach(m => { m.active = false; m.done = false; m.progress = m.id === 'files' ? '0/5' : (m.id === 'nap' ? '0s' : '0/1'); });
+  currentMission = 0; missions[0].active = true;
+  updateMissionUI();
+  renderer.domElement.requestPointerLock();
+}
+
+document.addEventListener('pointerlockchange', () => {
+  mouse.locked = document.pointerLockElement === renderer.domElement;
+});
+renderer.domElement.addEventListener('click', () => {
+  if (started && !gameOver && !mouse.locked) renderer.domElement.requestPointerLock();
+});
+
+function selectWeapon(n) {
+  player.weapon = n;
+  document.querySelectorAll('.weapon').forEach((el, i) => {
+    el.classList.toggle('active', i === n);
+  });
+}
+selectWeapon(0);
+
+function tryInteract() {
+  if (!player.interactTarget) return;
+  const m = missions[currentMission];
+  if (m.id === 'coffee' && player.interactTarget.type === 'bossCoffee' && !player.coffee) {
+    player.coffee = true;
+    bossCoffee.visible = false;
+    setPhoneMsg('✅ 拿到老板咖啡!<br>扔咖啡杯 (3) 可以造成大量伤害', '— 你');
+    m.progress = '1/1';
+    updateMissionUI();
+    setTimeout(() => nextMission(), 1500);
+  } else if (m.id === 'files' && player.interactTarget.type === 'hrDesk') {
+    // 拿文件(自动扔到hr附近就算)
+    filesThrowToHR();
+  } else if (m.id === 'nap' && player.interactTarget.type === 'sofa') {
+    player.pantrying = true;
+    setPhoneMsg('开始摸鱼! 在沙发保持 10 秒<br>⚠ HR 会来找你', '— 你');
+  }
+}
+
+// 任务2: 把文件夹扔到HR附近
+let hrDeskPos = new THREE.Vector3(0, 0, -2);
+function filesThrowToHR() {
+  // 切换到文件夹
+  selectWeapon(3);
+  // 给个提示
+  setPhoneMsg('现在你拿着文件夹<br>走近 HR (黄星) 扔他 (左键)', '— HR');
+}
+
+/* ===========================================================
+   碰撞 (AABB 简化)
+   =========================================================== */
+const obstacles = [
+  // 工位(8 个)
+  ...Array.from({ length: 8 }, (_, i) => ({
+    min: new THREE.Vector3(-12 + (i%4)*4 - 1.05, 0, -8 + Math.floor(i/4)*5 - 0.55),
+    max: new THREE.Vector3(-12 + (i%4)*4 + 1.05, 1.5, -8 + Math.floor(i/4)*5 + 0.55),
+  })),
+  // 老板桌
+  { min: new THREE.Vector3(11, 0, 5.1), max: new THREE.Vector3(15, 1.5, 6.9) },
+  // 会议室桌
+  { min: new THREE.Vector3(-1.5, 0, -0.5), max: new THREE.Vector3(1.5, 1.5, 2.5) },
+  // 茶水台
+  { min: new THREE.Vector3(12, 0, -9.4), max: new THREE.Vector3(16, 1.4, -8.6) },
+  // 沙发
+  { min: new THREE.Vector3(13.7, 0, -8.4), max: new THREE.Vector3(16.3, 0.7, -7.6) },
+  // 墙
+  { min: new THREE.Vector3(-WORLD.W/2, 0, -WORLD.D/2), max: new THREE.Vector3(WORLD.W/2, WORLD.H, -WORLD.D/2 + 0.5) },
+  { min: new THREE.Vector3(-WORLD.W/2, 0, WORLD.D/2 - 0.5), max: new THREE.Vector3(WORLD.W/2, WORLD.H, WORLD.D/2) },
+  { min: new THREE.Vector3(-WORLD.W/2, 0, -WORLD.D/2), max: new THREE.Vector3(-WORLD.W/2 + 0.5, WORLD.H, WORLD.D/2) },
+  { min: new THREE.Vector3(WORLD.W/2 - 0.5, 0, -WORLD.D/2), max: new THREE.Vector3(WORLD.W/2, WORLD.H, WORLD.D/2) },
+  // 会议室玻璃隔断(允许穿过,这里跳过)
+];
+
+function collide(pos) {
+  // 边界
+  pos.x = Math.max(-WORLD.W/2 + 0.5, Math.min(WORLD.W/2 - 0.5, pos.x));
+  pos.z = Math.max(-WORLD.D/2 + 0.5, Math.min(WORLD.D/2 - 0.5, pos.z));
+  // 障碍
+  for (const o of obstacles) {
+    if (pos.x > o.min.x - player.radius && pos.x < o.max.x + player.radius &&
+        pos.z > o.min.z - player.radius && pos.z < o.max.z + player.radius) {
+      // 推开(找最近边)
+      const dx = Math.min(pos.x - o.min.x, o.max.x - pos.x);
+      const dz = Math.min(pos.z - o.min.z, o.max.z - pos.z);
+      if (dx < dz) {
+        pos.x = pos.x < (o.min.x + o.max.x)/2 ? o.min.x - player.radius : o.max.x + player.radius;
+      } else {
+        pos.z = pos.z < (o.min.z + o.max.z)/2 ? o.min.z - player.radius : o.max.z + player.radius;
+      }
+    }
+  }
+}
+
+/* ===========================================================
+   NPC AI  (状态机)
+   =========================================================== */
+function updateNPC(npc, dt) {
+  if (npc.stuntime > 0) {
+    npc.stuntime -= dt;
+    npc.obj.position.y = Math.abs(Math.sin(npc.stuntime * 12)) * 0.05;
+    return;
+  }
+  npc.obj.position.y = 0;
+
+  // 视野检测(简化:距离 + 角度)
+  const toPlayer = new THREE.Vector3().subVectors(player.pos, npc.obj.position);
+  const dist = toPlayer.length();
+  const canSee = dist < 9 && Math.abs(toPlayer.y) < 2;
+  if (canSee) npc.lastSeenPlayer = player.pos.clone();
+
+  let target = null;
+  if (npc.state === 'patrol') {
+    if (canSee) {
+      npc.state = 'chase'; npc.stateTimer = 0;
+      npc.alertLight.color.setHex(0xff0000);
+    } else {
+      target = npc.patrolPath[npc.patrolIdx];
+      const d = Math.hypot(target.x - npc.obj.position.x, target.z - npc.obj.position.z);
+      if (d < 0.5) {
+        npc.patrolIdx = (npc.patrolIdx + 1) % npc.patrolPath.length;
+      }
+    }
+  } else if (npc.state === 'chase') {
+    target = { x: npc.lastSeenPlayer.x, z: npc.lastSeenPlayer.z };
+    if (canSee) npc.stateTimer = 0;
+    else npc.stateTimer += dt;
+    if (npc.stateTimer > 4) {
+      npc.state = 'lost'; npc.stateTimer = 0;
+      npc.alertLight.color.setHex(0xffaa00);
+    }
+    if (dist < 1.2) {
+      // 抓到了!
+      player.hp -= 20 * dt;
+      if (player.hp <= 0) failGame(npc.role === 'boss' ? '老板亲自下场把你开了' : 'HR 把你送进离职流程');
+    }
+  } else if (npc.state === 'lost') {
+    target = npc.lastSeenPlayer;
+    npc.stateTimer += dt;
+    if (npc.stateTimer > 3) {
+      npc.state = 'patrol'; npc.alertLight.color.setHex(0x00ff00);
+    }
+  }
+
+  if (target) {
+    const dx = target.x - npc.obj.position.x;
+    const dz = target.z - npc.obj.position.z;
+    const d = Math.hypot(dx, dz);
+    if (d > 0.2) {
+      const sp = npc.state === 'chase' ? npc.speed * 1.5 : npc.speed;
+      npc.obj.position.x += (dx/d) * sp * dt;
+      npc.obj.position.z += (dz/d) * sp * dt;
+      npc.obj.rotation.y = Math.atan2(dx, dz);
+    }
+  }
+}
+
+function failGame(reason) {
+  gameOver = true;
+  document.getElementById('fail').style.display = 'flex';
+  document.getElementById('failReason').textContent = reason;
+  document.exitPointerLock();
+}
+document.getElementById('respawnBtn').addEventListener('click', respawn);
+
+/* ===========================================================
+   主循环
+   =========================================================== */
+const clock = new THREE.Clock();
+let accTime = 0;
+let frameCount = 0;
+const minimapCanvas = document.getElementById('minimapCanvas');
+const minimapCtx = minimapCanvas.getContext('2d');
+
+function tick() {
+  const dt = Math.min(0.05, clock.getDelta());
+  accTime += dt;
+  frameCount++;
+
+  if (started && !gameOver) {
+    /* === 鼠标视角 === */
+    player.yaw   -= mouse.dx * 0.0025;
+    player.pitch -= mouse.dy * 0.0025;
+    player.pitch = Math.max(-1.4, Math.min(1.4, player.pitch));
+    mouse.dx = mouse.dy = 0;
+
+    /* === 移动 === */
+    const f = new THREE.Vector3(Math.sin(player.yaw), 0, Math.cos(player.yaw));
+    const r = new THREE.Vector3(Math.cos(player.yaw), 0, -Math.sin(player.yaw));
+    const mv = new THREE.Vector3();
+    if (keys['KeyW']) mv.add(f);
+    if (keys['KeyS']) mv.sub(f);
+    if (keys['KeyA']) mv.sub(r);
+    if (keys['KeyD']) mv.add(r);
+    const isSprint = keys['ShiftLeft'] || keys['ShiftRight'];
+    const sp = (isSprint ? 7 : 3.5) * (player.speedMul || 1);
+    if (mv.lengthSq() > 0) {
+      mv.normalize().multiplyScalar(sp);
+      player.pos.x += mv.x * dt;
+      player.pos.z += mv.z * dt;
+    }
+    // 简单摩擦
+    player.vel.multiplyScalar(0.85);
+    player.pos.x += player.vel.x * dt;
+    player.pos.z += player.vel.z * dt;
+    collide(player.pos);
+
+    /* === 武器冷却 + 投掷 === */
+    player.throwCooldown = (player.throwCooldown || 0) - dt;
+    if (mouse.down && player.throwCooldown <= 0) throwWeapon();
+
+    /* === NPC === */
+    for (const n of npcs) updateNPC(n, dt);
+
+    /* === 任务逻辑 === */
+    const m = missions[currentMission];
+    if (m && !m.done) {
+      if (m.id === 'coffee') {
+        // 检测提示
+      } else if (m.id === 'files') {
+        // 命中HR就 +1
+        for (const p of projectiles) {
+          const d = p.mesh.position.distanceTo(hr.obj.position);
+          if (d < 1.0 && p.tag !== 'hit') {
+            p.tag = 'hit';
+            p.life = 0.1;
+            hr.stuntime = 1.2;
+            hr.state = 'chase'; hr.stateTimer = 0; hr.lastSeenPlayer = player.pos.clone();
+            player.wanted = Math.min(5, player.wanted + 0.5);
+            m.progress = `${++player.filesThrown}/5`;
+            updateMissionUI();
+            showBanner(`HR 被砸了! 还没倒下!`, 1000);
+            if (player.filesThrown >= 5) setTimeout(() => nextMission(), 1200);
+          }
+        }
+      } else if (m.id === 'nap') {
+        // 在沙发附近(隐藏)
+        const distToSofa = player.pos.distanceTo(new THREE.Vector3(15, 0, -8));
+        if (distToSofa < 2 && player.pantrying) {
+          napProgress += dt;
+          m.progress = `${Math.floor(napProgress)}s / 10s`;
+          updateMissionUI();
+          if (napProgress >= 10) {
+            setPhoneMsg('🎉 摸鱼成功!<br>HR 完全没发现你。', '— 你');
+            setTimeout(() => nextMission(), 1500);
+          }
+        } else {
+          if (player.pantrying) {
+            napProgress = Math.max(0, napProgress - dt * 0.5);
+          }
+        }
+        // HR 看见玩家就升级
+        for (const n of npcs) if (n.role === 'hr') {
+          const d = n.obj.position.distanceTo(player.pos);
+          if (d < 8) {
+            n.lastSeenPlayer = player.pos.clone();
+            n.state = 'chase'; n.stateTimer = 0;
+            n.alertLight.color.setHex(0xff0000);
+            player.wanted = Math.min(5, player.wanted + dt * 0.5);
+          }
+        }
+      }
+    }
+
+    /* === 通缉度衰减 === */
+    if (player.wanted > 0 && frameCount % 30 === 0) {
+      const distToBoss = player.pos.distanceTo(boss.obj.position);
+      const distToHR = player.pos.distanceTo(hr.obj.position);
+      if (Math.min(distToBoss, distToHR) > 12) {
+        player.wanted = Math.max(0, player.wanted - 0.05);
+      }
+    }
+    if (player.wanted >= 5) {
+      failGame('通缉度 5 星! 整层楼都在追你');
+    }
+
+    /* === 玩家视觉更新 === */
+    playerMesh.position.copy(player.pos);
+    playerMesh.rotation.y = player.yaw;
+    pRing.position.x = player.pos.x;
+    pRing.position.z = player.pos.z;
+
+    /* === 摄像机(第三人称 + 头部摆动) === */
+    const camOffset = new THREE.Vector3(0, 2.5, 5);
+    camOffset.applyEuler(new THREE.Euler(0, player.yaw, 0));
+    const camPos = new THREE.Vector3().copy(player.pos).add(camOffset);
+    camPos.y = Math.max(1.5, camPos.y);
+    camera.position.lerp(camPos, 0.15);
+    const lookAt = new THREE.Vector3(player.pos.x, 1.5, player.pos.z);
+    camera.lookAt(lookAt);
+
+    /* === 投射物更新 === */
+    for (let i = projectiles.length - 1; i >= 0; i--) {
+      const p = projectiles[i];
+      p.vel.y -= 9.8 * dt; // 重力
+      p.mesh.position.addScaledVector(p.vel, dt);
+      p.mesh.rotation.x += dt * 6; p.mesh.rotation.z += dt * 4;
+      p.life -= dt;
+      // 落地
+      if (p.mesh.position.y < 0.1) {
+        p.mesh.position.y = 0.1;
+        p.vel.y = -p.vel.y * 0.3;
+        p.vel.x *= 0.5; p.vel.z *= 0.5;
+        if (Math.abs(p.vel.y) < 0.5) { p.life = 0; }
+      }
+      if (p.life <= 0) {
+        scene.remove(p.mesh);
+        projectiles.splice(i, 1);
+      }
+    }
+
+    /* === 互动检测 === */
+    player.interactTarget = null;
+    const interactable = [
+      { type: 'bossCoffee', pos: new THREE.Vector3(13, 0, 6), dist: 2, label: '拿咖啡 [E]' },
+      { type: 'hrDesk',     pos: hr.obj.position.clone(), dist: 2, label: '拿文件夹 [E]' },
+      { type: 'sofa',       pos: new THREE.Vector3(15, 0, -8), dist: 2, label: '开始摸鱼 [E]' },
+    ];
+    for (const t of interactable) {
+      if (player.pos.distanceTo(t.pos) < t.dist) {
+        player.interactTarget = t;
+        break;
+      }
+    }
+    const intEl = document.getElementById('interact');
+    if (player.interactTarget && (player.interactTarget.type === 'bossCoffee' ? currentMission === 0 :
+        player.interactTarget.type === 'hrDesk' ? currentMission === 1 :
+        currentMission === 2)) {
+      intEl.textContent = player.interactTarget.label;
+      intEl.style.display = 'block';
+    } else {
+      intEl.style.display = 'none';
+    }
+
+    /* === HUD === */
+    document.getElementById('hpBar').style.width = `${Math.max(0, player.hp)}%`;
+    const starsEl = document.getElementById('stars');
+    const want = Math.ceil(player.wanted);
+    starsEl.innerHTML = '★★★★★'.split('').map((s, i) =>
+      `<span class="${i < want ? 'on' : ''}">${s}</span>`
+    ).join('');
+  }
+
+  /* === 迷你地图 === */
+  if (frameCount % 3 === 0) {
+    drawMinimap();
+  }
+
+  // 城市灯闪烁
+  if (frameCount % 60 === 0) {
+    cityGroup.children.forEach(c => {
+      if (c.material && c.material.color && c !== cityGroup.children[0]) {
+        // 灯偶尔变化
+      }
+    });
+  }
+
+  // 全息logo 旋转
+  if (holoLogo) {
+    holoLogo.rotation.y += dt * 0.5;
+    holoLogo.position.y = 1.4 + Math.sin(accTime * 2) * 0.05;
+  }
+
+  renderer.render(scene, camera);
+  requestAnimationFrame(tick);
+}
+
+function drawMinimap() {
+  const ctx = minimapCtx;
+  const W = minimapCanvas.width, H = minimapCanvas.height;
+  ctx.fillStyle = 'rgba(0,0,0,0.4)';
+  ctx.fillRect(0, 0, W, H);
+  // 缩放: 世界 (W:36, D:24) -> 画布 (200)
+  const sx = W / WORLD.W, sz = H / WORLD.D;
+
+  // 区域颜色
+  ctx.fillStyle = 'rgba(255,43,214,0.15)';
+  ctx.fillRect((13-3)*sx, 0, 6*sx, WORLD.D*sz); // 老板区
+  ctx.fillStyle = 'rgba(0,240,255,0.12)';
+  ctx.fillRect(12*sx, -10*sz, 6*sx, 5*sz); // 茶水间
+  ctx.fillStyle = 'rgba(155,60,255,0.12)';
+  ctx.fillRect(-3*sx, -2*sz, 6*sx, 5*sz); // 会议室
+
+  // 玩家
+  const px = (player.pos.x + WORLD.W/2) * sx;
+  const py = (player.pos.z + WORLD.D/2) * sz;
+  ctx.save();
+  ctx.translate(px, py);
+  ctx.rotate(player.yaw);
+  ctx.fillStyle = '#00f0ff';
+  ctx.beginPath();
+  ctx.moveTo(0, -5);
+  ctx.lineTo(-3, 4);
+  ctx.lineTo(3, 4);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+
+  // NPC
+  for (const n of npcs) {
+    const nx = (n.obj.position.x + WORLD.W/2) * sx;
+    const ny = (n.obj.position.z + WORLD.D/2) * sz;
+    ctx.fillStyle = n.state === 'chase' ? '#ff0000' : (n.state === 'lost' ? '#ffaa00' : '#ffe600');
+    ctx.beginPath();
+    ctx.arc(nx, ny, n.state === 'chase' ? 4 : 3, 0, Math.PI*2);
+    ctx.fill();
+    // 视野
+    if (n.state !== 'patrol') {
+      ctx.strokeStyle = 'rgba(255,0,0,0.3)';
+      ctx.beginPath();
+      ctx.arc(nx, ny, 9*sx, 0, Math.PI*2);
+      ctx.stroke();
+    }
+  }
+
+  // 任务点
+  if (currentMission === 0) {
+    const tx = (13 + WORLD.W/2) * sx;
+    const ty = (6 + WORLD.D/2) * sz;
+    drawBlink(ctx, tx, ty, '#ff2bd6');
+  } else if (currentMission === 1) {
+    const tx = (hr.obj.position.x + WORLD.W/2) * sx;
+    const ty = (hr.obj.position.z + WORLD.D/2) * sz;
+    drawBlink(ctx, tx, ty, '#ffe600');
+  } else if (currentMission === 2) {
+    const tx = (15 + WORLD.W/2) * sx;
+    const ty = (-8 + WORLD.D/2) * sz;
+    drawBlink(ctx, tx, ty, '#00f0ff');
+  }
+
+  // 边框
+  ctx.strokeStyle = 'rgba(0,240,255,0.6)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(0, 0, W, H);
+  // 文字
+  ctx.fillStyle = '#00f0ff';
+  ctx.font = '10px monospace';
+  ctx.fillText('N', W/2, 12);
+  ctx.fillText('S', W/2, H - 4);
+  ctx.fillText('W', 4, H/2);
+  ctx.fillText('E', W - 10, H/2);
+}
+let blinkOn = true;
+function drawBlink(ctx, x, y, color) {
+  blinkOn = !blinkOn;
+  if (blinkOn) return;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(x, y, 5, 0, Math.PI*2);
+  ctx.fill();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(x, y, 9, 0, Math.PI*2);
+  ctx.stroke();
+}
+
+document.getElementById('startBtn').addEventListener('click', startGame);
+
+// resize
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+tick();
+</script>
+</body>
+</html>
